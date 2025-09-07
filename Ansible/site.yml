@@ -1,0 +1,72 @@
+- name: Deploy webserver
+  hosts: webservers
+  become: true
+  tags: [deploy]
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Create web root
+      file:
+        path: "/var/www/sjsu-{{ site_id }}"
+        state: directory
+
+    - name: Copy index.html
+      template:
+        src: templates/index.html.j2
+        dest: "/var/www/sjsu-{{ site_id }}/index.html"
+
+    - name: Configure nginx site
+      template:
+        src: templates/nginx-site.conf.j2
+        dest: /etc/nginx/sites-available/sjsu
+      notify: Restart nginx
+
+    - name: Disable default site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Enable sjsu site
+      file:
+        src: /etc/nginx/sites-available/sjsu
+        dest: /etc/nginx/sites-enabled/sjsu
+        state: link
+      notify: Restart nginx
+
+    - name: Ensure nginx running
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+
+- name: Un-deploy webserver
+  hosts: webservers
+  become: true
+  tags: [undeploy]
+
+  tasks:
+    - name: Stop nginx
+      service:
+        name: nginx
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove nginx
+      apt:
+        name: nginx
+        state: absent
+        purge: yes
